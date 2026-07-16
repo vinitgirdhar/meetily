@@ -31,7 +31,7 @@ import { cn, isOllamaNotInstalledError } from '@/lib/utils';
 import { toast } from 'sonner';
 
 export interface ModelConfig {
-  provider: 'ollama' | 'groq' | 'claude' | 'openai' | 'openrouter' | '9router' | 'builtin-ai' | 'custom-openai';
+  provider: 'ollama' | 'groq' | 'gemini' | 'claude' | 'openai' | 'openrouter' | '9router' | 'builtin-ai' | 'custom-openai';
   model: string;
   whisperModel: string;
   apiKey?: string | null;
@@ -103,6 +103,14 @@ const GROQ_FALLBACK_MODELS = [
   'llama-3.1-70b-versatile',
   'mixtral-8x7b-32768',
   'gemma2-9b-it',
+];
+
+const GEMINI_FALLBACK_MODELS = [
+  'gemini-2.5-pro',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+  'gemini-1.5-pro',
+  'gemini-1.5-flash',
 ];
 
 interface ModelSettingsModalProps {
@@ -231,13 +239,20 @@ export function ModelSettingsModal({
     }
   }, [apiKey]);
 
+  // Providers that support "Auto" model selection (app picks easy/strong per task).
+  // builtin-ai and custom-openai are excluded (single fixed model each).
+  const AUTO_CAPABLE = ['ollama', 'claude', 'groq', 'gemini', 'openai', 'openrouter', '9router'];
+  const withAuto = (provider: string, list: string[]): string[] =>
+    AUTO_CAPABLE.includes(provider) ? ['auto', ...list] : list;
+
   const modelOptions: Record<string, string[]> = {
-    ollama: models.map((model) => model.name),
-    claude: claudeModels.length > 0 ? claudeModels : CLAUDE_FALLBACK_MODELS,
-    groq: groqModels.length > 0 ? groqModels : GROQ_FALLBACK_MODELS,
-    openai: openaiModels.length > 0 ? openaiModels : OPENAI_FALLBACK_MODELS,
-    openrouter: openRouterModels.map((m) => m.id),
-    '9router': nineRouterModels.map((m) => m.id),
+    ollama: withAuto('ollama', models.map((model) => model.name)),
+    claude: withAuto('claude', claudeModels.length > 0 ? claudeModels : CLAUDE_FALLBACK_MODELS),
+    groq: withAuto('groq', groqModels.length > 0 ? groqModels : GROQ_FALLBACK_MODELS),
+    gemini: withAuto('gemini', GEMINI_FALLBACK_MODELS),
+    openai: withAuto('openai', openaiModels.length > 0 ? openaiModels : OPENAI_FALLBACK_MODELS),
+    openrouter: withAuto('openrouter', openRouterModels.map((m) => m.id)),
+    '9router': withAuto('9router', nineRouterModels.map((m) => m.id)),
     'builtin-ai': builtinAiModels.map((m) => m.name),
     'custom-openai': customOpenAIModel ? [customOpenAIModel] : [], // User specifies model manually
   };
@@ -245,12 +260,19 @@ export function ModelSettingsModal({
   const requiresApiKey =
     modelConfig.provider === 'claude' ||
     modelConfig.provider === 'groq' ||
+    modelConfig.provider === 'gemini' ||
     modelConfig.provider === 'openai' ||
     modelConfig.provider === 'openrouter';
 
-  // 9Router is self-hosted: it shows the API key field but the key is optional
-  // (only needed when the router runs with REQUIRE_API_KEY enabled)
-  const showsApiKey = requiresApiKey || modelConfig.provider === '9router';
+  // 9Router and Ollama show the API key field but the key is optional:
+  // 9Router only needs it with REQUIRE_API_KEY; Ollama only needs it in Cloud
+  // mode (local Ollama needs no key).
+  const showsApiKey =
+    requiresApiKey ||
+    modelConfig.provider === '9router' ||
+    modelConfig.provider === 'ollama';
+  const apiKeyOptional =
+    modelConfig.provider === '9router' || modelConfig.provider === 'ollama';
 
   // Check if Ollama endpoint has changed but models haven't been fetched yet
   const ollamaEndpointChanged = modelConfig.provider === 'ollama' &&
@@ -953,11 +975,12 @@ export function ModelSettingsModal({
                 <SelectItem value="builtin-ai">Built-in AI (Offline, No API needed)</SelectItem>
                 <SelectItem value="claude">Claude</SelectItem>
                 <SelectItem value="custom-openai">Custom Server (OpenAI)</SelectItem>
+                <SelectItem value="gemini">Gemini</SelectItem>
                 <SelectItem value="groq">Groq</SelectItem>
                 <SelectItem value="ollama">Ollama</SelectItem>
                 <SelectItem value="openai">OpenAI</SelectItem>
                 <SelectItem value="openrouter">OpenRouter</SelectItem>
-                <SelectItem value="9router">9Router (Self-hosted)</SelectItem>
+                <SelectItem value="9router">9Router</SelectItem>
               </SelectContent>
             </Select>
 
@@ -971,7 +994,9 @@ export function ModelSettingsModal({
                     className="flex-1 max-w-[200px] justify-between font-normal"
                   >
                     <span className="truncate">
-                      {modelConfig.model || "Select model..."}
+                      {modelConfig.model === 'auto'
+                        ? '🪄 Auto (smart pick)'
+                        : modelConfig.model || "Select model..."}
                     </span>
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
@@ -997,8 +1022,8 @@ export function ModelSettingsModal({
                               <CommandItem
                                 key={model}
                                 value={model}
-                                onSelect={(currentValue) => {
-                                  setModelConfig((prev: ModelConfig) => ({ ...prev, model: currentValue }));
+                                onSelect={() => {
+                                  setModelConfig((prev: ModelConfig) => ({ ...prev, model }));
                                   setModelComboboxOpen(false);
                                 }}
                               >
@@ -1008,7 +1033,9 @@ export function ModelSettingsModal({
                                     modelConfig.model === model ? "opacity-100" : "opacity-0"
                                   )}
                                 />
-                                <span className="truncate">{model}</span>
+                                <span className={cn("truncate", model === 'auto' && "font-medium")}>
+                                  {model === 'auto' ? '🪄 Auto (smart pick)' : model}
+                                </span>
                               </CommandItem>
                             ))}
                           </CommandGroup>
@@ -1168,7 +1195,7 @@ export function ModelSettingsModal({
 
         {showsApiKey && (
           <div>
-            <Label>{modelConfig.provider === '9router' ? 'API Key (optional)' : 'API Key'}</Label>
+            <Label>{apiKeyOptional ? 'API Key (optional)' : 'API Key'}</Label>
             <div className="relative mt-1">
               <Input
                 type={showApiKey ? 'text' : 'password'}
@@ -1178,6 +1205,8 @@ export function ModelSettingsModal({
                 placeholder={
                   modelConfig.provider === '9router'
                     ? 'Only needed if 9Router requires an API key'
+                    : modelConfig.provider === 'ollama'
+                    ? 'Only needed for Ollama Cloud (leave empty for local)'
                     : 'Enter your API key'
                 }
                 className="pr-24"

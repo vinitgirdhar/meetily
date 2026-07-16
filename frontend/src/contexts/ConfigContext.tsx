@@ -80,6 +80,7 @@ interface ConfigContextType {
   providerApiKeys: {
     claude: string | null;
     groq: string | null;
+    gemini: string | null;
     openai: string | null;
     openrouter: string | null;
     '9router': string | null;
@@ -114,16 +115,17 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   });
 
   // Provider-specific API keys (loaded once at startup)
-  // Note: Gemini omitted for now - add when UI support is added
   const [providerApiKeys, setProviderApiKeys] = useState<{
     claude: string | null;
     groq: string | null;
+    gemini: string | null;
     openai: string | null;
     openrouter: string | null;
     '9router': string | null;
   }>({
     claude: null,
     groq: null,
+    gemini: null,
     openai: null,
     openrouter: null,
     '9router': null,
@@ -298,7 +300,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const loadAllApiKeys = async () => {
       try {
-        const providers = ['claude', 'groq', 'openai', 'openrouter', '9router'];
+        const providers = ['claude', 'groq', 'gemini', 'openai', 'openrouter', '9router'];
         const keys = await Promise.all(
           providers.map(p =>
             invoke<string>('api_get_api_key', { provider: p })
@@ -309,9 +311,10 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
         setProviderApiKeys({
           claude: keys[0],
           groq: keys[1],
-          openai: keys[2],
-          openrouter: keys[3],
-          '9router': keys[4],
+          gemini: keys[2],
+          openai: keys[3],
+          openrouter: keys[4],
+          '9router': keys[5],
         });
         console.log('[ConfigContext] Loaded provider API keys');
       } catch (error) {
@@ -370,6 +373,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     ollama: models.map(model => model.name),
     claude: ['claude-3-5-sonnet-latest'],
     groq: ['llama-3.3-70b-versatile'],
+    gemini: ['gemini-2.5-flash'],
     openrouter: [],
     '9router': [],
     openai: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo'],

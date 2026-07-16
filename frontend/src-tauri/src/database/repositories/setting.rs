@@ -130,6 +130,7 @@ impl SettingsRepository {
             "claude" => "anthropicApiKey",
             "ollama" => "ollamaApiKey",
             "groq" => "groqApiKey",
+            "gemini" => "geminiApiKey",
             "openrouter" => "openRouterApiKey",
             "9router" => "nineRouterApiKey",
             "builtin-ai" => return Ok(()), // No API key needed
@@ -169,6 +170,7 @@ impl SettingsRepository {
             "ollama" => "ollamaApiKey",
             "groq" => "groqApiKey",
             "claude" => "anthropicApiKey",
+            "gemini" => "geminiApiKey",
             "openrouter" => "openRouterApiKey",
             "9router" => "nineRouterApiKey",
             "builtin-ai" => return Ok(None), // No API key needed

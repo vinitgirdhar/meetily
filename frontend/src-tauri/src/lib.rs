@@ -49,6 +49,7 @@ pub mod anthropic;
 pub mod groq;
 pub mod openrouter;
 pub mod ninerouter;
+pub mod copilot;
 pub mod parakeet_engine;
 pub mod state;
 pub mod summary;
@@ -689,6 +690,7 @@ pub fn run() {
             ninerouter::get_ninerouter_models,
             ninerouter::ninerouter_auto_select_model,
             ninerouter::test_ninerouter_connection,
+            copilot::copilot_suggest_answer,
             audio::recording_preferences::get_recording_preferences,
             audio::recording_preferences::set_recording_preferences,
             audio::recording_preferences::get_default_recordings_folder_path,

@@ -69,6 +69,7 @@ pub enum LLMProvider {
     OpenAI,
     Claude,
     Groq,
+    Gemini,
     Ollama,
     OpenRouter,
     NineRouter,
@@ -83,6 +84,7 @@ impl LLMProvider {
             "openai" => Ok(Self::OpenAI),
             "claude" => Ok(Self::Claude),
             "groq" => Ok(Self::Groq),
+            "gemini" | "google" => Ok(Self::Gemini),
             "ollama" => Ok(Self::Ollama),
             "openrouter" => Ok(Self::OpenRouter),
             "9router" | "ninerouter" => Ok(Self::NineRouter),
@@ -159,6 +161,12 @@ pub async fn generate_summary(
             "https://api.groq.com/openai/v1/chat/completions".to_string(),
             header::HeaderMap::new(),
         ),
+        // Gemini via its OpenAI-compatible endpoint so it reuses the standard
+        // Bearer-auth + chat/completions path below.
+        LLMProvider::Gemini => (
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions".to_string(),
+            header::HeaderMap::new(),
+        ),
         LLMProvider::OpenRouter => (
             "https://openrouter.ai/api/v1/chat/completions".to_string(),
             header::HeaderMap::new(),
@@ -209,8 +217,10 @@ pub async fn generate_summary(
         }
     };
 
-    // Add authorization header for non-Claude providers
-    if provider != &LLMProvider::Claude {
+    // Add authorization header for non-Claude providers.
+    // Skip when the key is empty (local Ollama / keyless 9Router) so we don't
+    // send an empty `Bearer` header that some servers reject.
+    if provider != &LLMProvider::Claude && !api_key.trim().is_empty() {
         headers.insert(
             header::AUTHORIZATION,
             format!("Bearer {}", api_key)
@@ -347,6 +357,7 @@ fn provider_name(provider: &LLMProvider) -> &str {
         LLMProvider::OpenAI => "OpenAI",
         LLMProvider::Claude => "Claude",
         LLMProvider::Groq => "Groq",
+        LLMProvider::Gemini => "Gemini",
         LLMProvider::Ollama => "Ollama",
         LLMProvider::BuiltInAI => "Built-in AI",
         LLMProvider::OpenRouter => "OpenRouter",

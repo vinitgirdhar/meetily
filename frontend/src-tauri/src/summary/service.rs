@@ -335,7 +335,14 @@ impl SummaryService {
         };
 
         // Validate and setup api_key, Flexible for Ollama, BuiltInAI, and CustomOpenAI
-        let api_key = if provider == LLMProvider::Ollama || provider == LLMProvider::BuiltInAI || provider == LLMProvider::CustomOpenAI {
+        let api_key = if provider == LLMProvider::Ollama {
+            // Ollama is keyless when run locally, but Ollama Cloud accepts an API
+            // key. Use the stored key if the user provided one; otherwise empty.
+            match SettingsRepository::get_api_key(&pool, "ollama").await {
+                Ok(Some(key)) if !key.trim().is_empty() => key,
+                _ => String::new(),
+            }
+        } else if provider == LLMProvider::BuiltInAI || provider == LLMProvider::CustomOpenAI {
             // These providers don't require API keys from the standard database column
             String::new()
         } else if provider == LLMProvider::NineRouter {
@@ -413,6 +420,33 @@ impl SummaryService {
             custom_openai_api_key.unwrap_or_default()
         } else {
             api_key
+        };
+
+        // Auto model selection: if the user chose "auto", pick an easy/strong
+        // model per request difficulty. For 9Router (dynamic), classify against
+        // the live model list; static providers use built-in tiers.
+        let model_name = if model_name.eq_ignore_ascii_case(crate::summary::auto_model::AUTO_MODEL) {
+            let available: Vec<String> = if provider == LLMProvider::NineRouter {
+                crate::ninerouter::get_ninerouter_models(
+                    None,
+                    Some(final_api_key.clone()).filter(|k| !k.trim().is_empty()),
+                )
+                .await
+                .map(|models| models.into_iter().map(|m| m.id).collect())
+                .unwrap_or_default()
+            } else {
+                Vec::new()
+            };
+            let chosen = crate::summary::auto_model::resolve_model(
+                &model_name,
+                &provider,
+                &text,
+                &available,
+            );
+            info!("🤖 Auto model selected '{}' for this request", chosen);
+            chosen
+        } else {
+            model_name
         };
 
         // Dynamically fetch context size based on provider and model

@@ -9,6 +9,7 @@ import { useRecordingState } from '@/contexts/RecordingStateContext';
 import { usePermissionCheck } from '@/hooks/usePermissionCheck';
 import { ModalType } from '@/hooks/useModalState';
 import { useIsLinux } from '@/hooks/usePlatform';
+import { LiveCopilotPanel } from '@/components/LiveCopilotPanel';
 import { useMemo } from 'react';
 
 /**
@@ -117,6 +118,9 @@ export function TranscriptPanel({
           </div>
         </div>
       </div>
+
+      {/* Live AI copilot — suggests answers during recording */}
+      <LiveCopilotPanel />
     </div>
   );
 }
