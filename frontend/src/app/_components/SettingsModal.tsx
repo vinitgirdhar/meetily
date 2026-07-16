@@ -108,6 +108,7 @@ export function SettingsModals({
                       <option value="groq">Groq</option>
                       <option value="ollama">Ollama</option>
                       <option value="openrouter">OpenRouter</option>
+                      <option value="9router">9Router</option>
                       <option value="openai">OpenAI</option>
                     </select>
 

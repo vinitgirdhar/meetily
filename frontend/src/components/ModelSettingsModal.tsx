@@ -31,7 +31,7 @@ import { cn, isOllamaNotInstalledError } from '@/lib/utils';
 import { toast } from 'sonner';
 
 export interface ModelConfig {
-  provider: 'ollama' | 'groq' | 'claude' | 'openai' | 'openrouter' | 'builtin-ai' | 'custom-openai';
+  provider: 'ollama' | 'groq' | 'claude' | 'openai' | 'openrouter' | '9router' | 'builtin-ai' | 'custom-openai';
   model: string;
   whisperModel: string;
   apiKey?: string | null;
@@ -61,6 +61,10 @@ interface OpenRouterModel {
 }
 
 interface OpenAIModel {
+  id: string;
+}
+
+interface NineRouterModel {
   id: string;
 }
 
@@ -133,6 +137,9 @@ export function ModelSettingsModal({
   const [openRouterModels, setOpenRouterModels] = useState<OpenRouterModel[]>([]);
   const [openRouterError, setOpenRouterError] = useState<string>('');
   const [isLoadingOpenRouter, setIsLoadingOpenRouter] = useState<boolean>(false);
+  const [nineRouterModels, setNineRouterModels] = useState<NineRouterModel[]>([]);
+  const [nineRouterError, setNineRouterError] = useState<string>('');
+  const [isLoadingNineRouter, setIsLoadingNineRouter] = useState<boolean>(false);
   const [ollamaEndpoint, setOllamaEndpoint] = useState<string>(modelConfig.ollamaEndpoint || '');
   const [isLoadingOllama, setIsLoadingOllama] = useState<boolean>(false);
   const [lastFetchedEndpoint, setLastFetchedEndpoint] = useState<string>(modelConfig.ollamaEndpoint || '');
@@ -229,6 +236,7 @@ export function ModelSettingsModal({
     groq: groqModels.length > 0 ? groqModels : GROQ_FALLBACK_MODELS,
     openai: openaiModels.length > 0 ? openaiModels : OPENAI_FALLBACK_MODELS,
     openrouter: openRouterModels.map((m) => m.id),
+    '9router': nineRouterModels.map((m) => m.id),
     'builtin-ai': builtinAiModels.map((m) => m.name),
     'custom-openai': customOpenAIModel ? [customOpenAIModel] : [], // User specifies model manually
   };
@@ -238,6 +246,10 @@ export function ModelSettingsModal({
     modelConfig.provider === 'groq' ||
     modelConfig.provider === 'openai' ||
     modelConfig.provider === 'openrouter';
+
+  // 9Router is self-hosted: it shows the API key field but the key is optional
+  // (only needed when the router runs with REQUIRE_API_KEY enabled)
+  const showsApiKey = requiresApiKey || modelConfig.provider === '9router';
 
   // Check if Ollama endpoint has changed but models haven't been fetched yet
   const ollamaEndpointChanged = modelConfig.provider === 'ollama' &&
@@ -403,14 +415,14 @@ export function ModelSettingsModal({
 
   // Sync local apiKey state when provider changes
   useEffect(() => {
-    if (providerApiKeys && requiresApiKey && modelConfig.provider !== 'custom-openai') {
+    if (providerApiKeys && showsApiKey && modelConfig.provider !== 'custom-openai') {
       const correctKey = providerApiKeys[modelConfig.provider as keyof typeof providerApiKeys];
       if (correctKey !== apiKey) {
         setApiKey(correctKey || '');
         setIsApiKeyLocked(!!correctKey?.trim());
       }
     }
-  }, [modelConfig.provider, providerApiKeys, requiresApiKey]);
+  }, [modelConfig.provider, providerApiKeys, showsApiKey]);
 
   // Manual fetch function for Ollama models
   const fetchOllamaModels = async (silent = false) => {
@@ -500,6 +512,27 @@ export function ModelSettingsModal({
       );
     } finally {
       setIsLoadingOpenRouter(false);
+    }
+  };
+
+  const loadNineRouterModels = async (key?: string | null) => {
+    if (nineRouterModels.length > 0) return; // Already loaded
+
+    try {
+      setIsLoadingNineRouter(true);
+      setNineRouterError('');
+      const data = (await invoke('get_ninerouter_models', {
+        endpoint: null,
+        apiKey: key?.trim() || null,
+      })) as NineRouterModel[];
+      setNineRouterModels(data);
+    } catch (err) {
+      console.error('Error loading 9Router models:', err);
+      setNineRouterError(
+        err instanceof Error ? err.message : String(err) || 'Failed to load 9Router models'
+      );
+    } finally {
+      setIsLoadingNineRouter(false);
     }
   };
 
@@ -598,6 +631,13 @@ export function ModelSettingsModal({
     }
   }, [modelConfig.provider, apiKey]);
 
+  // Auto-fetch 9Router models when provider is 9router (API key optional)
+  useEffect(() => {
+    if (modelConfig.provider === '9router') {
+      loadNineRouterModels(apiKey);
+    }
+  }, [modelConfig.provider, apiKey]);
+
   // Restore cached model when async model lists become available
   useEffect(() => {
     const providerModels = modelOptions[modelConfig.provider];
@@ -612,7 +652,7 @@ export function ModelSettingsModal({
     if (cachedModel && providerModels.includes(cachedModel)) {
       setModelConfig((prev: ModelConfig) => ({ ...prev, model: cachedModel }));
     }
-  }, [models, openRouterModels, builtinAiModels, openaiModels, claudeModels, groqModels, modelConfig.provider]);
+  }, [models, openRouterModels, nineRouterModels, builtinAiModels, openaiModels, claudeModels, groqModels, modelConfig.provider]);
 
   const handleSave = async () => {
     // For custom-openai provider, save the custom config first
@@ -881,6 +921,7 @@ export function ModelSettingsModal({
                 <SelectItem value="ollama">Ollama</SelectItem>
                 <SelectItem value="openai">OpenAI</SelectItem>
                 <SelectItem value="openrouter">OpenRouter</SelectItem>
+                <SelectItem value="9router">9Router (Self-hosted)</SelectItem>
               </SelectContent>
             </Select>
 
@@ -904,6 +945,7 @@ export function ModelSettingsModal({
                     <CommandInput placeholder="Search models..." />
                     <CommandList className="max-h-[300px]">
                       {(modelConfig.provider === 'openrouter' && isLoadingOpenRouter) ||
+                       (modelConfig.provider === '9router' && isLoadingNineRouter) ||
                        (modelConfig.provider === 'openai' && isLoadingOpenAI) ||
                        (modelConfig.provider === 'claude' && isLoadingClaude) ||
                        (modelConfig.provider === 'groq' && isLoadingGroq) ? (
@@ -1070,16 +1112,20 @@ export function ModelSettingsModal({
           </div>
         )}
 
-        {requiresApiKey && (
+        {showsApiKey && (
           <div>
-            <Label>API Key</Label>
+            <Label>{modelConfig.provider === '9router' ? 'API Key (optional)' : 'API Key'}</Label>
             <div className="relative mt-1">
               <Input
                 type={showApiKey ? 'text' : 'password'}
                 value={apiKey || ''}
                 onChange={(e) => setApiKey(e.target.value)}
                 disabled={isApiKeyLocked}
-                placeholder="Enter your API key"
+                placeholder={
+                  modelConfig.provider === '9router'
+                    ? 'Only needed if 9Router requires an API key'
+                    : 'Enter your API key'
+                }
                 className="pr-24"
               />
               {isApiKeyLocked && apiKey?.trim() && (
@@ -1112,6 +1158,14 @@ export function ModelSettingsModal({
               </div>
             </div>
           </div>
+        )}
+
+        {modelConfig.provider === '9router' && nineRouterError && (
+          <Alert className="border-orange-500 bg-orange-50">
+            <AlertDescription className="text-orange-800">
+              Could not load models from 9Router (http://localhost:20128). Make sure 9Router is running. {nineRouterError}
+            </AlertDescription>
+          </Alert>
         )}
 
         {modelConfig.provider === 'ollama' && (

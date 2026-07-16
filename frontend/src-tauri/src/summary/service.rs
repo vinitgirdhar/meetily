@@ -324,6 +324,17 @@ impl SummaryService {
         let api_key = if provider == LLMProvider::Ollama || provider == LLMProvider::BuiltInAI || provider == LLMProvider::CustomOpenAI {
             // These providers don't require API keys from the standard database column
             String::new()
+        } else if provider == LLMProvider::NineRouter {
+            // 9Router is self-hosted; an API key is only needed when the router
+            // runs with REQUIRE_API_KEY, so use the stored key if present
+            match SettingsRepository::get_api_key(&pool, &model_provider).await {
+                Ok(Some(key)) => key,
+                Ok(None) => String::new(),
+                Err(e) => {
+                    info!("Failed to retrieve 9Router API key: {}, proceeding without it", e);
+                    String::new()
+                }
+            }
         } else {
             match SettingsRepository::get_api_key(&pool, &model_provider).await {
                 Ok(Some(key)) if !key.is_empty() => key,
