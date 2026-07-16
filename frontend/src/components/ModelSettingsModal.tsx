@@ -161,6 +161,7 @@ export function ModelSettingsModal({
   const [customTopP, setCustomTopP] = useState<string>(modelConfig.topP?.toString() || '');
   const [isCustomOpenAIAdvancedOpen, setIsCustomOpenAIAdvancedOpen] = useState<boolean>(false);
   const [isTestingConnection, setIsTestingConnection] = useState<boolean>(false);
+  const [isAutoSelecting, setIsAutoSelecting] = useState<boolean>(false);
 
   // Combobox state
   const [modelComboboxOpen, setModelComboboxOpen] = useState<boolean>(false);
@@ -731,6 +732,41 @@ export function ModelSettingsModal({
     }
   };
 
+  // Test 9Router connection
+  const testNineRouterConnection = async () => {
+    setIsTestingConnection(true);
+    try {
+      const result = await invoke<{ status: string; message: string }>('test_ninerouter_connection', {
+        endpoint: null,
+        apiKey: apiKey?.trim() || null,
+      });
+      toast.success(result.message || 'Connection successful!');
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      toast.error(errorMsg);
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
+
+  // Auto-pick the best available 9Router model
+  const autoSelectNineRouterModel = async () => {
+    setIsAutoSelecting(true);
+    try {
+      const best = await invoke<string>('ninerouter_auto_select_model', {
+        endpoint: null,
+        apiKey: apiKey?.trim() || null,
+      });
+      setModelConfig((prev: ModelConfig) => ({ ...prev, model: best }));
+      toast.success(`Auto-selected: ${best}`);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      toast.error(errorMsg);
+    } finally {
+      setIsAutoSelecting(false);
+    }
+  };
+
   const handleInputClick = () => {
     if (isApiKeyLocked) {
       setIsLockButtonVibrating(true);
@@ -982,6 +1018,24 @@ export function ModelSettingsModal({
                   </Command>
                 </PopoverContent>
               </Popover>
+            )}
+
+            {modelConfig.provider === '9router' && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={autoSelectNineRouterModel}
+                disabled={isAutoSelecting || isLoadingNineRouter}
+                className="whitespace-nowrap"
+                title="Pick the best available model automatically"
+              >
+                {isAutoSelecting ? (
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                ) : (
+                  'Auto'
+                )}
+              </Button>
             )}
           </div>
         </div>
@@ -1445,7 +1499,28 @@ export function ModelSettingsModal({
         </div>
       </div> */}
 
-      <div className="mt-6 flex justify-end">
+      <div className="mt-6 flex justify-end gap-2">
+        {modelConfig.provider === '9router' && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={testNineRouterConnection}
+            disabled={isTestingConnection}
+            className="px-4 text-sm font-medium"
+          >
+            {isTestingConnection ? (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                Testing...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="mr-2 h-4 w-4" />
+                Test Connection
+              </>
+            )}
+          </Button>
+        )}
         <Button
           className={cn(
             'px-4 text-sm font-medium text-white rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500',

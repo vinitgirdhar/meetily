@@ -1381,3 +1381,82 @@ pub async fn api_test_custom_openai_connection<R: Runtime>(
         }
     }
 }
+
+/// Extract plain text from an uploaded resume file (PDF, or text/markdown).
+///
+/// PDFs are parsed with `pdf-extract`; `.txt`/`.md` are read directly.
+#[tauri::command]
+pub async fn api_extract_resume_text<R: Runtime>(
+    _app: AppHandle<R>,
+    file_path: String,
+) -> Result<String, String> {
+    log_info!("api_extract_resume_text called for '{}'", &file_path);
+
+    let lower = file_path.to_lowercase();
+    let text = if lower.ends_with(".pdf") {
+        // pdf-extract is synchronous/CPU-bound; run off the async runtime.
+        let path = file_path.clone();
+        tauri::async_runtime::spawn_blocking(move || pdf_extract::extract_text(&path))
+            .await
+            .map_err(|e| format!("Failed to run PDF extraction: {}", e))?
+            .map_err(|e| format!("Failed to extract text from PDF: {}", e))?
+    } else if lower.ends_with(".txt") || lower.ends_with(".md") || lower.ends_with(".markdown") {
+        std::fs::read_to_string(&file_path)
+            .map_err(|e| format!("Failed to read file: {}", e))?
+    } else {
+        return Err("Unsupported file type. Please upload a PDF, .txt, or .md file.".to_string());
+    };
+
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return Err("No text could be extracted from this file.".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
+/// Save the active resume context (background info fed into summaries).
+#[tauri::command]
+pub async fn api_save_resume_context<R: Runtime>(
+    _app: AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+    content: String,
+    filename: Option<String>,
+) -> Result<(), String> {
+    if content.trim().is_empty() {
+        return Err("Resume content is empty.".to_string());
+    }
+    SettingsRepository::save_resume_context(
+        state.db_manager.pool(),
+        content.trim(),
+        filename.as_deref(),
+    )
+    .await
+    .map_err(|e| format!("Failed to save resume context: {}", e))
+}
+
+/// Get the active resume context. Returns { content, filename } or null.
+#[tauri::command]
+pub async fn api_get_resume_context<R: Runtime>(
+    _app: AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<serde_json::Value>, String> {
+    match SettingsRepository::get_resume_context(state.db_manager.pool()).await {
+        Ok(Some((content, filename))) => Ok(Some(serde_json::json!({
+            "content": content,
+            "filename": filename,
+        }))),
+        Ok(None) => Ok(None),
+        Err(e) => Err(format!("Failed to load resume context: {}", e)),
+    }
+}
+
+/// Clear the active resume context.
+#[tauri::command]
+pub async fn api_clear_resume_context<R: Runtime>(
+    _app: AppHandle<R>,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    SettingsRepository::clear_resume_context(state.db_manager.pool())
+        .await
+        .map_err(|e| format!("Failed to clear resume context: {}", e))
+}

@@ -311,6 +311,20 @@ impl SummaryService {
         // Register cancellation token for this meeting
         let cancellation_token = Self::register_cancellation_token(&meeting_id);
 
+        // Prepend the active resume context (if any) so the summary LLM has the
+        // user's background to answer questions raised in the meeting.
+        let custom_prompt = match SettingsRepository::get_resume_context(&pool).await {
+            Ok(Some((resume, _filename))) if !resume.trim().is_empty() => {
+                info!("📄 Injecting resume context into summary prompt ({} chars)", resume.len());
+                format!(
+                    "Background context about the user (from their uploaded resume):\n{}\n\n{}",
+                    resume.trim(),
+                    custom_prompt
+                )
+            }
+            _ => custom_prompt,
+        };
+
         // Parse provider
         let provider = match LLMProvider::from_str(&model_provider) {
             Ok(p) => p,

@@ -67,6 +67,52 @@ impl SettingsRepository {
         Ok(())
     }
 
+    /// Save (replace) the single active resume context used as summary background.
+    pub async fn save_resume_context(
+        pool: &SqlitePool,
+        content: &str,
+        filename: Option<&str>,
+    ) -> std::result::Result<(), sqlx::Error> {
+        let now = chrono::Utc::now().to_rfc3339();
+        sqlx::query(
+            r#"
+            INSERT INTO resume_context (id, content, filename, updated_at)
+            VALUES (1, $1, $2, $3)
+            ON CONFLICT(id) DO UPDATE SET
+                content = excluded.content,
+                filename = excluded.filename,
+                updated_at = excluded.updated_at
+            "#,
+        )
+        .bind(content)
+        .bind(filename)
+        .bind(now)
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Fetch the active resume context, if any. Returns (content, filename).
+    pub async fn get_resume_context(
+        pool: &SqlitePool,
+    ) -> std::result::Result<Option<(String, Option<String>)>, sqlx::Error> {
+        let row: Option<(String, Option<String>)> =
+            sqlx::query_as("SELECT content, filename FROM resume_context WHERE id = 1")
+                .fetch_optional(pool)
+                .await?;
+        Ok(row)
+    }
+
+    /// Remove the active resume context.
+    pub async fn clear_resume_context(
+        pool: &SqlitePool,
+    ) -> std::result::Result<(), sqlx::Error> {
+        sqlx::query("DELETE FROM resume_context WHERE id = 1")
+            .execute(pool)
+            .await?;
+        Ok(())
+    }
+
     pub async fn save_api_key(
         pool: &SqlitePool,
         provider: &str,
