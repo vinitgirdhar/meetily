@@ -71,6 +71,7 @@ pub enum LLMProvider {
     Groq,
     Ollama,
     OpenRouter,
+    NineRouter,
     BuiltInAI,
     CustomOpenAI,
 }
@@ -84,6 +85,7 @@ impl LLMProvider {
             "groq" => Ok(Self::Groq),
             "ollama" => Ok(Self::Ollama),
             "openrouter" => Ok(Self::OpenRouter),
+            "9router" | "ninerouter" => Ok(Self::NineRouter),
             "builtin-ai" | "local-llama" | "localllama" => Ok(Self::BuiltInAI),
             "custom-openai" => Ok(Self::CustomOpenAI),
             _ => Err(format!("Unsupported LLM provider: {}", s)),
@@ -159,6 +161,13 @@ pub async fn generate_summary(
         ),
         LLMProvider::OpenRouter => (
             "https://openrouter.ai/api/v1/chat/completions".to_string(),
+            header::HeaderMap::new(),
+        ),
+        LLMProvider::NineRouter => (
+            format!(
+                "{}/v1/chat/completions",
+                crate::ninerouter::DEFAULT_NINEROUTER_ENDPOINT
+            ),
             header::HeaderMap::new(),
         ),
         LLMProvider::Ollama => {
@@ -341,6 +350,7 @@ fn provider_name(provider: &LLMProvider) -> &str {
         LLMProvider::Ollama => "Ollama",
         LLMProvider::BuiltInAI => "Built-in AI",
         LLMProvider::OpenRouter => "OpenRouter",
+        LLMProvider::NineRouter => "9Router",
         LLMProvider::CustomOpenAI => "Custom OpenAI",
     }
 }
